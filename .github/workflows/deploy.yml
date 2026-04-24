@@ -48,8 +48,8 @@ jobs:
             set -euo pipefail
 
             mkdir -p /opt/apps
-            if [ -f /opt/apps/slovo/deploy/.env.vps ]; then
-              cp -f /opt/apps/slovo/deploy/.env.vps /tmp/slovo.env.vps.bak
+            if [ -f /opt/apps/slovo/product/deploy/.env.vps ]; then
+              cp -f /opt/apps/slovo/product/deploy/.env.vps /tmp/slovo.env.vps.bak
             fi
 
             rm -rf /opt/apps/slovo
@@ -57,10 +57,10 @@ jobs:
             tar -xzf /tmp/slovo-release.tgz -C /opt/apps/slovo
 
             if [ -f /tmp/slovo.env.vps.bak ]; then
-              cp -f /tmp/slovo.env.vps.bak /opt/apps/slovo/deploy/.env.vps
+              cp -f /tmp/slovo.env.vps.bak /opt/apps/slovo/product/deploy/.env.vps
             fi
 
-            cd /opt/apps/slovo/deploy
+            cd /opt/apps/slovo/product/deploy
             docker compose -p slovo -f docker-compose.vps.yml --env-file .env.vps build --no-cache
             docker compose -p slovo -f docker-compose.vps.yml --env-file .env.vps up -d --force-recreate
 
