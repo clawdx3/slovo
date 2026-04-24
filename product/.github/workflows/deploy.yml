@@ -1,0 +1,76 @@
+name: Deploy Slovo to VPS
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-slovo-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create release bundle
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='.output' \
+            --exclude='.data' \
+            --exclude='slovo-release.tgz' \
+            -czf /tmp/slovo-release.tgz .
+          cp /tmp/slovo-release.tgz ./slovo-release.tgz
+
+      - name: Upload release bundle to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "slovo-release.tgz"
+          target: "/tmp"
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            mkdir -p /opt/apps
+            if [ -f /opt/apps/slovo/deploy/.env.vps ]; then
+              cp -f /opt/apps/slovo/deploy/.env.vps /tmp/slovo.env.vps.bak
+            fi
+
+            rm -rf /opt/apps/slovo
+            mkdir -p /opt/apps/slovo
+            tar -xzf /tmp/slovo-release.tgz -C /opt/apps/slovo
+
+            if [ -f /tmp/slovo.env.vps.bak ]; then
+              cp -f /tmp/slovo.env.vps.bak /opt/apps/slovo/deploy/.env.vps
+            fi
+
+            cd /opt/apps/slovo/deploy
+            docker compose -p slovo -f docker-compose.vps.yml --env-file .env.vps build --no-cache
+            docker compose -p slovo -f docker-compose.vps.yml --env-file .env.vps up -d --force-recreate
+
+            # Wait for app to be ready (retry up to 3 minutes)
+            for i in $(seq 1 90); do
+              if curl -fsS http://127.0.0.1:${SLOVO_PORT:-3200}/api/health >/dev/null 2>&1; then
+                echo "Deploy OK"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Health check timed out after 180s"
+            exit 1

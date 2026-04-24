@@ -1,0 +1,32 @@
+# Nuxt
+.nuxt
+.nitro
+.output
+data
+.cache
+.temp
+
+# Node
+node_modules
+*.log
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Misc
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea
+.vscode
+*.swp
+
+# Build outputs
+build
+dist
+
+# Uploads
+.data
