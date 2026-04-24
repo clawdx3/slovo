@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  slovo:
+    image: slovo:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: prod
+    container_name: slovo-app
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    env_file:
+      - .env.vps
+    environment:
+      REDIS_URL: redis://${REDIS_USER:-slovo}:${REDIS_PASSWORD}@vps-redis:6379/0
+    ports:
+      - "127.0.0.1:${SLOVO_PORT:-3200}:3000"
+    networks:
+      - default
+      - shared
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+networks:
+  shared:
+    external: true
+    name: vps-app-stack_internal
