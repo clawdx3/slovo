@@ -43,7 +43,7 @@ export async function burnSubtitlesToVideo(
   const args = [
     '-y',
     '-i', videoPath,
-    '-vf', `subtitles=${srtPath}:force_style='FontName=Arial,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,MarginV=60,Alignment=2,BorderStyle=1'`,
+    '-vf', `subtitles=${srtPath}:force_style='FontName=DejaVu Sans,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=1,MarginV=100,Alignment=2,BorderStyle=3,BackColour=&H80000000'`,
     '-c:a', 'copy',
     '-movflags', '+faststart',
     outputPath,
