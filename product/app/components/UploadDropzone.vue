@@ -62,7 +62,7 @@
 <script setup lang="ts">
 import type { TranscriptSegment } from '~/types'
 
-const emit = defineEmits<{ (e: 'uploaded', segments: TranscriptSegment[]): void }>()
+const emit = defineEmits<{ (e: 'uploaded', data: { id: string; segments: TranscriptSegment[] }): void }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
@@ -101,7 +101,7 @@ async function processFile(file: File) {
       }
     })
 
-    const response = await new Promise<{ segments: TranscriptSegment[] }>((resolve, reject) => {
+    const response = await new Promise<{ id: string; segments: TranscriptSegment[] }>((resolve, reject) => {
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
@@ -118,7 +118,7 @@ async function processFile(file: File) {
       xhr.send(formData)
     })
 
-    emit('uploaded', response.segments)
+    emit('uploaded', response)
   } catch (err: any) {
     error.value = err?.message || 'Upload failed. Please try again.'
   } finally {
