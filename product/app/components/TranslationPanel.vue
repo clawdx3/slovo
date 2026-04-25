@@ -10,16 +10,23 @@
           Back
         </button>
         <button
+          v-if="hasTranslated"
           @click="translate"
           :disabled="translating"
           class="px-4 py-2 bg-teal-500 hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors"
         >
-          {{ translating ? 'Translating...' : 'Translate to English' }}
+          {{ translating ? 'Translating...' : 'Re-translate' }}
         </button>
       </div>
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+    <!-- Translating state overlay -->
+    <div v-if="translating && !hasTranslated" class="flex flex-col items-center justify-center py-16">
+      <div class="w-10 h-10 border-4 border-teal-100 border-t-teal-500 rounded-full animate-spin mb-4"></div>
+      <p class="text-sm text-gray-500">Translating...</p>
+    </div>
+
+    <div v-else class="bg-white rounded-2xl border border-gray-100 overflow-hidden">
       <div class="max-h-[60vh] overflow-y-auto">
         <div
           v-for="(seg, i) in translated"
@@ -77,6 +84,7 @@ const original = ref<TranscriptSegment[]>([...props.transcript.map(s => ({ ...s 
 const translated = ref<TranscriptSegment[]>([...props.transcript.map(s => ({ ...s }))])
 const translating = ref(false)
 const error = ref('')
+const hasTranslated = ref(false)
 
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -94,7 +102,7 @@ async function translate() {
 
   try {
     const texts = original.value.map(s => s.text)
-    const { translations } = await $fetch('/api/translate', {
+    const { translations } = await $fetch('api/translate', {
       method: 'POST',
       body: { texts },
     })
@@ -103,6 +111,7 @@ async function translate() {
       ...seg,
       text: translations[i] || seg.text,
     }))
+    hasTranslated.value = true
   } catch (err: any) {
     error.value = err?.message || 'Translation failed. Please try again.'
   } finally {
@@ -116,4 +125,8 @@ function goToExport() {
     translation: translated.value,
   })
 }
+
+onMounted(() => {
+  translate()
+})
 </script>
