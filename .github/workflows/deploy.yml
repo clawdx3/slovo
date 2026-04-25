@@ -62,6 +62,7 @@ jobs:
             fi
 
             cd /opt/apps/slovo/product/deploy
+            docker rm -f slovo-app || true
             docker compose -p slovo -f docker-compose.vps.yml down || true
             docker compose -p slovo -f docker-compose.vps.yml --env-file .env.vps build --no-cache
             docker compose -p slovo -f docker-compose.vps.yml --env-file .env.vps up -d --force-recreate
