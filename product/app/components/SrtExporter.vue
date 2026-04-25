@@ -175,7 +175,7 @@ async function burnVideo() {
 
   burning.value = true
   try {
-    const response = await fetch('/api/burn', {
+    const response = await fetch('api/burn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -234,7 +234,7 @@ async function confirmDelete() {
 
   if (props.uploadId) {
     try {
-      await $fetch(`/api/upload/${props.uploadId}`, { method: 'DELETE' })
+      await $fetch(`api/upload/${props.uploadId}`, { method: 'DELETE' })
     } catch {
       // Ignore cleanup errors — video may already be gone
     }
