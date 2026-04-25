@@ -1,7 +1,7 @@
-import { createReadStream, stat as fsStat } from 'node:fs'
-import { access, unlink } from 'node:fs/promises'
+import { access, mkdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { burnSubtitlesToVideo } from '../utils/burn-subtitles'
+import { createJob, updateJob } from '../utils/jobs'
 
 export default defineEventHandler(async (event) => {
   console.log('[burn] ========== REQUEST START ==========')
@@ -21,8 +21,8 @@ export default defineEventHandler(async (event) => {
   }
 
   const uploadsDir = join(process.cwd(), '.data', 'uploads')
+  const burnedDir = join(process.cwd(), '.data', 'burned')
   const videoPath = join(uploadsDir, `${uploadId}.mp4`)
-  const outputPath = join(uploadsDir, `${uploadId}_burned_${language}.mp4`)
 
   try {
     await access(videoPath)
@@ -32,38 +32,67 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Original video not found' })
   }
 
+  const jobId = `${uploadId}_burn_${language}`
+  const outputPath = join(burnedDir, `${jobId}.mp4`)
+
+  // Ensure burned directory exists
   try {
-    console.log('[burn] Starting ffmpeg...')
-    await burnSubtitlesToVideo(videoPath, segments, outputPath)
-    console.log('[burn] ffmpeg completed successfully')
-
-    const stats = await new Promise<import('node:fs').Stats>((resolve, reject) => {
-      fsStat(outputPath, (err: any, st: import('node:fs').Stats) => {
-        if (err) reject(err)
-        else resolve(st)
-      })
-    })
-    console.log('[burn] Output file size:', stats.size, 'bytes')
-
-    setHeader(event, 'Content-Type', 'video/mp4')
-    setHeader(event, 'Content-Disposition', `attachment; filename="slovo_${language}.mp4"`)
-    setHeader(event, 'Content-Length', String(stats.size))
-
-    const stream = createReadStream(outputPath)
-
-    event.node.res.on('finish', () => {
-      console.log('[burn] Response finished, cleaning up temp file')
-      unlink(outputPath).catch(() => {})
-    })
-    event.node.res.on('close', () => {
-      console.log('[burn] Response closed, cleaning up temp file')
-      unlink(outputPath).catch(() => {})
-    })
-
-    console.log('[burn] Starting stream...')
-    return sendStream(event, stream)
-  } catch (err: any) {
-    console.error('[burn] ERROR:', err)
-    throw createError({ statusCode: 500, statusMessage: err?.message || 'Failed to burn subtitles' })
+    await mkdir(burnedDir, { recursive: true })
+  } catch {
+    // ignore
   }
+
+  // Create job
+  createJob({
+    id: jobId,
+    type: 'burn',
+    status: 'burning',
+    progress: 0,
+    outputPath,
+  })
+
+  // Process asynchronously — return immediately so frontend can poll
+  processBurn(jobId, videoPath, segments, outputPath).catch((err) => {
+    console.error('[burn] Job failed:', err)
+    updateJob(jobId, {
+      status: 'failed',
+      error: err?.message || 'Burning failed',
+    })
+    // Clean up partial output
+    try {
+      unlink(outputPath).catch(() => {})
+    } catch {
+      // ignore
+    }
+  })
+
+  return { jobId, status: 'burning' }
 })
+
+async function processBurn(
+  jobId: string,
+  videoPath: string,
+  segments: Array<{ start: number; end: number; text: string }>,
+  outputPath: string,
+): Promise<void> {
+  try {
+    await burnSubtitlesToVideo(videoPath, segments, outputPath, {
+      onProgress: (pct: number) => {
+        updateJob(jobId, {
+          progress: Math.round(pct),
+        })
+      },
+    })
+
+    updateJob(jobId, {
+      status: 'completed',
+      progress: 100,
+    })
+  } catch (err: any) {
+    updateJob(jobId, {
+      status: 'failed',
+      error: err?.message || 'Burning failed',
+    })
+    throw err
+  }
+}

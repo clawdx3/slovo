@@ -4,20 +4,12 @@ export interface TranscriptSegment {
   text: string
 }
 
-export interface TranscriptionJob {
+export interface Job {
   id: string
-  status: 'pending' | 'extracting_audio' | 'transcribing' | 'completed' | 'failed'
-  progress: number
-  segments: TranscriptSegment[] | null
-  error: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface JobStatus {
-  id: string
-  status: 'pending' | 'extracting_audio' | 'transcribing' | 'completed' | 'failed'
+  type: 'transcribe' | 'burn'
+  status: 'pending' | 'extracting_audio' | 'transcribing' | 'burning' | 'completed' | 'failed'
   progress: number
   segments?: TranscriptSegment[]
+  outputPath?: string
   error?: string
 }

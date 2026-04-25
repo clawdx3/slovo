@@ -65,20 +65,40 @@
           Download .srt
         </button>
 
-        <button
-          v-if="uploadId"
-          :disabled="burning"
-          @click="burnVideo"
-          class="w-full px-5 py-3 bg-gray-900 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
-        >
-          <svg v-if="!burning" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-          </svg>
-          <svg v-else class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
-          {{ burning ? 'Burning subtitles...' : 'Download video with subtitles' }}
-        </button>
+        <div v-if="burnState.phase === 'idle' || burnState.phase === 'error'">
+          <button
+            v-if="uploadId"
+            :disabled="burning"
+            @click="burnVideo"
+            class="w-full px-5 py-3 bg-gray-900 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+          >
+            <svg v-if="!burning" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+            <svg v-else class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+            Download video with subtitles
+          </button>
+        </div>
+
+        <!-- Burn progress -->
+        <div v-else-if="burnState.phase === 'burning' || burnState.phase === 'downloading'" class="w-full">
+          <div class="flex items-center justify-between text-sm mb-2">
+            <span class="text-gray-600">{{ burnLabel }} {{ Math.round(burnState.progress) }}%</span>
+          </div>
+          <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              class="h-full bg-teal-500 rounded-full transition-all duration-300"
+              :style="{ width: burnState.progress + '%' }"
+            />
+          </div>
+        </div>
+
+        <!-- Burn error -->
+        <div v-if="burnState.error" class="mt-2 px-4 py-3 bg-red-50 text-red-600 text-sm rounded-xl">
+          {{ burnState.error }}
+        </div>
       </div>
     </div>
 
@@ -150,7 +170,28 @@ const emit = defineEmits<{
 
 const language = ref<'sl' | 'en'>('en')
 const showDeleteModal = ref(false)
-const burning = ref(false)
+
+interface BurnState {
+  phase: 'idle' | 'burning' | 'downloading' | 'completed' | 'error'
+  jobId: string | null
+  progress: number
+  error: string
+}
+
+const burnState = reactive<BurnState>({
+  phase: 'idle',
+  jobId: null,
+  progress: 0,
+  error: '',
+})
+
+const burning = computed(() => burnState.phase === 'burning' || burnState.phase === 'downloading')
+
+const burnLabel = computed(() => {
+  if (burnState.progress < 10) return 'Preparing...'
+  if (burnState.progress < 90) return 'Burning subtitles...'
+  return 'Finalizing...'
+})
 
 const segments = computed(() =>
   language.value === 'en' && props.translation ? props.translation : props.transcript
@@ -173,21 +214,49 @@ const preview = computed(() => {
 async function burnVideo() {
   if (!props.uploadId || burning.value) return
 
-  burning.value = true
+  burnState.phase = 'burning'
+  burnState.progress = 0
+  burnState.error = ''
+  burnState.jobId = null
+
+  let jobId: string
+
   try {
-    const response = await fetch('api/burn', {
+    const response = await $fetch<{ jobId: string; status: string }>('api/burn', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         uploadId: props.uploadId,
         segments: segments.value,
         language: language.value,
-      }),
+      },
     })
+    jobId = response.jobId
+    burnState.jobId = jobId
+  } catch (err: any) {
+    console.error('Burn request failed:', err)
+    burnState.phase = 'error'
+    burnState.error = err?.statusMessage || 'Failed to start burning. Please try again.'
+    return
+  }
 
+  // Poll job status
+  try {
+    await pollBurnJob(jobId)
+  } catch (err: any) {
+    console.error('Burn job failed:', err)
+    burnState.phase = 'error'
+    burnState.error = err?.message || 'Burning failed. Please try again.'
+    return
+  }
+
+  // Download the burned video
+  burnState.phase = 'downloading'
+  burnState.progress = 100
+
+  try {
+    const response = await fetch(`api/burn/${jobId}`)
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}))
-      throw new Error(err.statusMessage || `HTTP ${response.status}`)
+      throw new Error(`Download failed: ${response.status}`)
     }
 
     const blob = await response.blob()
@@ -200,14 +269,42 @@ async function burnVideo() {
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
 
-    // Show deletion confirmation after burn
+    burnState.phase = 'completed'
+
+    // Show deletion confirmation after successful burn
     showDeleteModal.value = true
   } catch (err: any) {
-    console.error('Burn failed:', err)
-    alert('Failed to burn subtitles: ' + (err?.message || 'Unknown error'))
-  } finally {
-    burning.value = false
+    console.error('Download failed:', err)
+    burnState.phase = 'error'
+    burnState.error = err?.message || 'Download failed. Please try again.'
   }
+}
+
+function pollBurnJob(jobId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const interval = setInterval(async () => {
+      try {
+        const job = await $fetch<{
+          status: string
+          progress: number
+          error?: string
+        }>(`api/jobs/${jobId}`)
+
+        burnState.progress = job.progress
+
+        if (job.status === 'completed') {
+          clearInterval(interval)
+          resolve()
+        } else if (job.status === 'failed') {
+          clearInterval(interval)
+          reject(new Error(job.error || 'Burning failed'))
+        }
+      } catch (err: any) {
+        clearInterval(interval)
+        reject(new Error(err?.statusMessage || 'Failed to check job status'))
+      }
+    }, 500)
+  })
 }
 
 function downloadSrt() {

@@ -2,20 +2,7 @@ import { join } from 'node:path'
 import { unlink, stat } from 'node:fs/promises'
 import { extractAudio } from '../utils/ffmpeg'
 import { transcribeWithGroq } from '../utils/groq'
-
-// In-memory job store (per-process, sufficient for single-instance MVP)
-interface Job {
-  id: string
-  status: 'pending' | 'extracting_audio' | 'transcribing' | 'completed' | 'failed'
-  progress: number
-  segments?: Array<{ start: number; end: number; text: string }>
-  error?: string
-}
-
-const jobs = new Map<string, Job>()
-
-// Expose jobs map for the GET endpoint
-export const jobStore = jobs
+import { createJob, updateJob, getJob } from '../utils/jobs'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -42,21 +29,20 @@ export default defineEventHandler(async (event) => {
   }
 
   // Create job
-  const job: Job = {
+  createJob({
     id: uploadId,
-    status: 'extracting_audio',
+    type: 'transcribe',
+    status: 'pending',
     progress: 0,
-  }
-  jobs.set(uploadId, job)
+  })
 
   // Process asynchronously — return immediately so frontend can poll
   processJob(uploadId, videoPath, audioPath, runtimeConfig.groqApiKey).catch((err) => {
     console.error('[transcribe] Job failed:', err)
-    const j = jobs.get(uploadId)
-    if (j) {
-      j.status = 'failed'
-      j.error = err?.message || 'Processing failed'
-    }
+    updateJob(uploadId, {
+      status: 'failed',
+      error: err?.message || 'Processing failed',
+    })
   })
 
   return { id: uploadId, status: 'processing' }
@@ -68,31 +54,35 @@ async function processJob(
   audioPath: string,
   apiKey: string,
 ): Promise<void> {
-  const job = jobs.get(jobId)
-  if (!job) return
-
   // Phase 1: Extract audio
-  job.status = 'extracting_audio'
-  job.progress = 0
+  updateJob(jobId, {
+    status: 'extracting_audio',
+    progress: 0,
+  })
 
   await extractAudio({
     videoPath,
     audioPath,
     onProgress: (pct) => {
-      const j = jobs.get(jobId)
-      if (j) j.progress = Math.round(pct * 0.5) // extraction = 0-50%
+      updateJob(jobId, {
+        progress: Math.round(pct * 0.5), // extraction = 0-50%
+      })
     },
   })
 
   // Phase 2: Transcribe with Groq
-  job.status = 'transcribing'
-  job.progress = 50
+  updateJob(jobId, {
+    status: 'transcribing',
+    progress: 50,
+  })
 
   const { segments } = await transcribeWithGroq(audioPath, apiKey)
 
-  job.status = 'completed'
-  job.progress = 100
-  job.segments = segments
+  updateJob(jobId, {
+    status: 'completed',
+    progress: 100,
+    segments,
+  })
 
   // Clean up audio temp file (keep video for burn/download)
   try {

@@ -1,4 +1,4 @@
-import { jobStore } from '../transcribe.post'
+import { getJob } from '../../utils/jobs'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -6,16 +6,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Job ID required' })
   }
 
-  const job = jobStore.get(id)
+  const job = getJob(id)
   if (!job) {
     throw createError({ statusCode: 404, statusMessage: 'Job not found' })
   }
 
   return {
     id: job.id,
+    type: job.type,
     status: job.status,
     progress: job.progress,
-    segments: job.segments,
+    segments: 'segments' in job ? job.segments : undefined,
+    outputPath: job.outputPath,
     error: job.error,
   }
 })
