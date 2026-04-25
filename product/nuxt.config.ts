@@ -5,6 +5,7 @@ export default defineNuxtConfig({
   srcDir: 'app/',
   runtimeConfig: {
     groqApiKey: process.env.GROQ_API_KEY || '',
+    deepLApiKey: process.env.DEEPL_API_KEY || '',
     googleTranslateApiKey: process.env.GOOGLE_TRANSLATE_API_KEY || '',
     redisUrl: process.env.REDIS_URL || 'redis://localhost:6379/0',
     public: {

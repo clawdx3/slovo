@@ -1,4 +1,4 @@
-import { translateWithGoogle } from '../utils/google-translate'
+import { translateWithDeepL } from '../utils/deepl-translate'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -9,17 +9,18 @@ export default defineEventHandler(async (event) => {
   }
 
   const runtimeConfig = useRuntimeConfig()
-  if (!runtimeConfig.googleTranslateApiKey) {
-    throw createError({ statusCode: 500, statusMessage: 'GOOGLE_TRANSLATE_API_KEY not configured' })
+  const apiKey = runtimeConfig.deepLApiKey || runtimeConfig.googleTranslateApiKey
+  if (!apiKey) {
+    throw createError({ statusCode: 500, statusMessage: 'DEEPL_API_KEY or GOOGLE_TRANSLATE_API_KEY not configured' })
   }
 
+  // Prefer DeepL if key is present, otherwise fall back to Google
+  const useDeepL = !!runtimeConfig.deepLApiKey
+
   try {
-    const translations = await translateWithGoogle(
-      texts,
-      runtimeConfig.googleTranslateApiKey,
-      'sl',
-      'en'
-    )
+    const translations = useDeepL
+      ? await translateWithDeepL(texts, apiKey, 'sl', 'en-us')
+      : await import('../utils/google-translate').then((m) => m.translateWithGoogle(texts, apiKey, 'sl', 'en'))
 
     return { translations }
   } catch (err: any) {
