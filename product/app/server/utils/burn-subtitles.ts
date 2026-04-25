@@ -43,7 +43,7 @@ export async function burnSubtitlesToVideo(
   const args = [
     '-y',
     '-i', videoPath,
-    '-vf', `subtitles=${srtPath}:force_style='FontName=DejaVu Sans,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=1,MarginV=100,Alignment=2,BorderStyle=3,BackColour=&H80000000'`,
+    '-vf', `subtitles=${srtPath}:force_style='FontName=DejaVu Sans,FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=1,MarginV=100,Alignment=2,BorderStyle=1'`,
     '-c:a', 'copy',
     '-movflags', '+faststart',
     outputPath,
@@ -65,11 +65,14 @@ export async function burnSubtitlesToVideo(
         console.log('[burn] ffmpeg:', chunk.trim().slice(0, 120))
       }
 
-      // Parse progress from ffmpeg stderr: "out_time_ms=12345"
+      // Parse progress from ffmpeg stderr: "time=00:01:23.45" 
       if (onProgress && durationSec > 0) {
-        const timeMatch = chunk.match(/out_time_ms=(\d+)/)
+        const timeMatch = chunk.match(/time=(\d+):(\d+):(\d+\.\d+)/)
         if (timeMatch) {
-          const currentTimeSec = parseInt(timeMatch[1], 10) / 1_000_000
+          const hours = parseInt(timeMatch[1], 10)
+          const mins = parseInt(timeMatch[2], 10)
+          const secs = parseFloat(timeMatch[3])
+          const currentTimeSec = hours * 3600 + mins * 60 + secs
           const pct = Math.min(100, Math.round((currentTimeSec / durationSec) * 100))
           onProgress(pct)
         }
