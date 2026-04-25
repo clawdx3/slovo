@@ -1,4 +1,4 @@
-import { writeFile, mkdir, readFile, unlink } from 'node:fs/promises'
+import { writeFile, mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { transcribeWithGroq } from '../utils/groq'
 
@@ -29,14 +29,9 @@ export default defineEventHandler(async (event) => {
     const audioBuffer = await readFile(filePath)
     const { segments } = await transcribeWithGroq(audioBuffer, runtimeConfig.groqApiKey)
 
-    return { segments }
+    // Video is kept until SRT is downloaded — will be cleaned up by DELETE /api/upload/:id
+    return { id, segments }
   } catch (err: any) {
     throw createError({ statusCode: 500, statusMessage: err?.message || 'Transcription failed' })
-  } finally {
-    try {
-      await unlink(filePath)
-    } catch {
-      // ignore cleanup errors
-    }
   }
 })

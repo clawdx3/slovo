@@ -136,15 +136,21 @@ projects/slovo/product/
 ## Status
 
 **Completed:** 2026-04-25
-**Branch:** `feat/PRD-56-initial-build`
-**PR:** https://github.com/clawdx3/slovo/pull/1
+**Branch:** `feat/PRD-56-initial-build` → merged to `main`
+**PR:** https://github.com/clawdx3/slovo/pull/1 (merged)
 **Reviewer:** `borutkitak`
 
-All core acceptance criteria implemented except karaoke-style word timing (optional). Build passes (`pnpm build` OK). Ready for review.
+All core acceptance criteria implemented except karaoke-style word timing (optional). Build passes (`pnpm build` OK). Merged to `main` per Borut's request.
+
+### Deploy status
+- GitHub Actions workflow is in place at `.github/workflows/deploy.yml`
+- First deploy run **failed** because GitHub secrets are missing in the `slovo` repo
+- **Blocker:** `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` secrets must be added to the repo (same as route-optimizer)
+- **Also needed on VPS:** `GROQ_API_KEY`, `GOOGLE_TRANSLATE_API_KEY`, `REDIS_PASSWORD`
+- Next push to `main` will auto-trigger deploy once secrets are configured
 
 ## Handoff
 
-- Developer → Reviewer: code review needed
-- After review → QA: test upload/transcribe/translate/export flow end-to-end
-- After QA → PR merge (do NOT push to main)
-- Orchestrator: update Linear PRD-56 to "In Review"
+- Developer → Orchestrator: notify Borut that secrets are needed
+- After secrets configured → next push triggers auto-deploy
+- QA: test upload/transcribe/translate/export flow end-to-end

@@ -64,6 +64,56 @@
         Download .srt
       </button>
     </div>
+
+    <!-- Deletion confirmation modal -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 scale-95"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-95"
+      >
+        <div
+          v-if="showDeleteModal"
+          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+          <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="cancelDelete" />
+          <div class="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div class="flex items-start gap-4">
+              <div class="flex-shrink-0 w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center">
+                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <div class="flex-1">
+                <h3 class="text-base font-semibold text-gray-900 mb-1">
+                  One last check
+                </h3>
+                <p class="text-sm text-gray-500 leading-relaxed mb-5">
+                  Your SRT file has been downloaded. This is your last chance to review or edit anything before the uploaded video is permanently deleted.
+                </p>
+                <div class="flex gap-3">
+                  <button
+                    @click="cancelDelete"
+                    class="flex-1 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 text-sm font-medium rounded-xl transition-colors"
+                  >
+                    Keep video — go back
+                  </button>
+                  <button
+                    @click="confirmDelete"
+                    class="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-xl transition-colors"
+                  >
+                    Delete video
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -73,6 +123,7 @@ import type { TranscriptSegment } from '~/types'
 const props = defineProps<{
   transcript: TranscriptSegment[]
   translation: TranscriptSegment[] | null
+  uploadId?: string
 }>()
 
 const emit = defineEmits<{
@@ -81,6 +132,7 @@ const emit = defineEmits<{
 }>()
 
 const language = ref<'sl' | 'en'>('en')
+const showDeleteModal = ref(false)
 
 const segments = computed(() =>
   language.value === 'en' && props.translation ? props.translation : props.transcript
@@ -110,5 +162,27 @@ function downloadSrt() {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+
+  // Show deletion confirmation after download
+  showDeleteModal.value = true
+}
+
+function cancelDelete() {
+  showDeleteModal.value = false
+}
+
+async function confirmDelete() {
+  showDeleteModal.value = false
+
+  if (props.uploadId) {
+    try {
+      await $fetch(`/api/upload/${props.uploadId}`, { method: 'DELETE' })
+    } catch {
+      // Ignore cleanup errors — video may already be gone
+    }
+  }
+
+  // Reset to upload step after deletion
+  emit('reset')
 }
 </script>

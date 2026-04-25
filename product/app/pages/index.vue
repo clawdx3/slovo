@@ -47,8 +47,9 @@
         v-else-if="step === 'export' && transcript"
         :transcript="transcript"
         :translation="translation"
+        :upload-id="uploadId"
         @back="step = 'translate'"
-        @reset="step = 'upload'"
+        @reset="resetUpload"
       />
     </main>
 
@@ -66,9 +67,11 @@ type Step = 'upload' | 'processing' | 'editor' | 'translate' | 'export'
 const step = ref<Step>('upload')
 const transcript = ref<TranscriptSegment[] | null>(null)
 const translation = ref<TranscriptSegment[] | null>(null)
+const uploadId = ref<string>('')
 
-function onUploaded(segments: TranscriptSegment[]) {
-  transcript.value = segments
+function onUploaded(data: { id: string; segments: TranscriptSegment[] }) {
+  uploadId.value = data.id
+  transcript.value = data.segments
   step.value = 'editor'
 }
 
@@ -81,5 +84,12 @@ function goToExport(data: { transcript: TranscriptSegment[], translation: Transc
   transcript.value = data.transcript
   translation.value = data.translation
   step.value = 'export'
+}
+
+function resetUpload() {
+  uploadId.value = ''
+  transcript.value = null
+  translation.value = null
+  step.value = 'upload'
 }
 </script>
