@@ -114,7 +114,7 @@ async function processFile(file: File) {
         }
       })
       xhr.addEventListener('error', () => reject(new Error('Network error')))
-      xhr.open('POST', '/api/transcribe')
+      xhr.open('POST', 'api/transcribe')
       xhr.send(formData)
     })
 

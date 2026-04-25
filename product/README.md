@@ -1,12 +1,13 @@
 # Slovo
 
-Slovenian video transcription app. Upload a video, get editable transcript, translate to English, export as .srt for Adobe Premiere on iOS.
+Slovenian video transcription app. Upload a video, get editable transcript, translate to English, export as .srt or burn subtitles directly into the video for social media.
 
 ## Stack
 - Nuxt 3 (fullstack)
 - Tailwind CSS
 - Groq Whisper API (transcription)
 - Google Cloud Translation API (translation)
+- FFmpeg (subtitle burning)
 - BullMQ + Redis (job queue — ready for future use)
 
 ## Dev

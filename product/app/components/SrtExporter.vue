@@ -54,15 +54,32 @@
         </div>
       </div>
 
-      <button
-        @click="downloadSrt"
-        class="w-full px-5 py-3 bg-teal-500 hover:bg-teal-600 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 12.75V3m0 0l-3.75 3.75M12 3l3.75 3.75" />
-        </svg>
-        Download .srt
-      </button>
+      <div class="flex flex-col gap-3">
+        <button
+          @click="downloadSrt"
+          class="w-full px-5 py-3 bg-teal-500 hover:bg-teal-600 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M12 12.75V3m0 0l-3.75 3.75M12 3l3.75 3.75" />
+          </svg>
+          Download .srt
+        </button>
+
+        <button
+          v-if="uploadId"
+          :disabled="burning"
+          @click="burnVideo"
+          class="w-full px-5 py-3 bg-gray-900 hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+        >
+          <svg v-if="!burning" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+          <svg v-else class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          {{ burning ? 'Burning subtitles...' : 'Download video with subtitles' }}
+        </button>
+      </div>
     </div>
 
     <!-- Deletion confirmation modal -->
@@ -133,6 +150,7 @@ const emit = defineEmits<{
 
 const language = ref<'sl' | 'en'>('en')
 const showDeleteModal = ref(false)
+const burning = ref(false)
 
 const segments = computed(() =>
   language.value === 'en' && props.translation ? props.translation : props.transcript
@@ -151,6 +169,41 @@ const preview = computed(() => {
     .map((seg, i) => `${i + 1}\n${toSrtTime(seg.start)} --> ${toSrtTime(seg.end)}\n${seg.text}`)
     .join('\n\n')
 })
+
+async function burnVideo() {
+  if (!props.uploadId || burning.value) return
+
+  burning.value = true
+  try {
+    const response = await $fetch('/api/burn', {
+      method: 'POST',
+      body: {
+        uploadId: props.uploadId,
+        segments: segments.value,
+        language: language.value,
+      },
+      responseType: 'blob',
+    })
+
+    const blob = new Blob([response as BlobPart], { type: 'video/mp4' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `slovo_${language.value}_subtitled.mp4`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    // Show deletion confirmation after burn
+    showDeleteModal.value = true
+  } catch (err: any) {
+    console.error('Burn failed:', err)
+    alert('Failed to burn subtitles: ' + (err?.data?.statusMessage || err?.message || 'Unknown error'))
+  } finally {
+    burning.value = false
+  }
+}
 
 function downloadSrt() {
   const blob = new Blob([preview.value], { type: 'text/plain;charset=utf-8' })
