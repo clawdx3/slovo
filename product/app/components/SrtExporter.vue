@@ -175,17 +175,22 @@ async function burnVideo() {
 
   burning.value = true
   try {
-    const response = await $fetch('/api/burn', {
+    const response = await fetch('/api/burn', {
       method: 'POST',
-      body: {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         uploadId: props.uploadId,
         segments: segments.value,
         language: language.value,
-      },
-      responseType: 'blob',
+      }),
     })
 
-    const blob = new Blob([response as BlobPart], { type: 'video/mp4' })
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}))
+      throw new Error(err.statusMessage || `HTTP ${response.status}`)
+    }
+
+    const blob = await response.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -199,7 +204,7 @@ async function burnVideo() {
     showDeleteModal.value = true
   } catch (err: any) {
     console.error('Burn failed:', err)
-    alert('Failed to burn subtitles: ' + (err?.data?.statusMessage || err?.message || 'Unknown error'))
+    alert('Failed to burn subtitles: ' + (err?.message || 'Unknown error'))
   } finally {
     burning.value = false
   }

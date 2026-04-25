@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises'
+import { createReadStream, stat } from 'node:fs'
+import { access, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { burnSubtitlesToVideo } from '../utils/burn-subtitles'
 
@@ -19,8 +20,7 @@ export default defineEventHandler(async (event) => {
   const outputPath = join(uploadsDir, `${uploadId}_burned_${language}.mp4`)
 
   try {
-    // Verify video exists
-    await readFile(videoPath)
+    await access(videoPath)
   } catch {
     throw createError({ statusCode: 404, statusMessage: 'Original video not found' })
   }
@@ -28,12 +28,26 @@ export default defineEventHandler(async (event) => {
   try {
     await burnSubtitlesToVideo(videoPath, segments, outputPath)
 
-    // Stream the result back
-    const burnedVideo = await readFile(outputPath)
+    const fileStat = await new Promise<import('node:fs').Stats>((resolve, reject) => {
+      stat(outputPath, (err, st) => {
+        if (err) reject(err)
+        else resolve(st)
+      })
+    })
 
     setHeader(event, 'Content-Type', 'video/mp4')
     setHeader(event, 'Content-Disposition', `attachment; filename="slovo_${language}.mp4"`)
-    return burnedVideo
+    setHeader(event, 'Content-Length', String(fileStat.size))
+
+    const stream = createReadStream(outputPath)
+    event.node.res.on('finish', () => {
+      try { unlink(outputPath) } catch { /* ignore */ }
+    })
+    event.node.res.on('close', () => {
+      try { unlink(outputPath) } catch { /* ignore */ }
+    })
+
+    return sendStream(event, stream)
   } catch (err: any) {
     console.error('[burn] ffmpeg error:', err)
     throw createError({ statusCode: 500, statusMessage: err?.message || 'Failed to burn subtitles' })
