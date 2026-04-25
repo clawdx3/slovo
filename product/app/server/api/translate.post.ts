@@ -1,3 +1,4 @@
+import { translateWithGroq } from '../utils/groq-translate'
 import { translateWithDeepL } from '../utils/deepl-translate'
 
 export default defineEventHandler(async (event) => {
@@ -9,18 +10,25 @@ export default defineEventHandler(async (event) => {
   }
 
   const runtimeConfig = useRuntimeConfig()
-  const apiKey = runtimeConfig.deepLApiKey || runtimeConfig.googleTranslateApiKey
+  const apiKey = runtimeConfig.groqApiKey || runtimeConfig.deepLApiKey || runtimeConfig.googleTranslateApiKey
   if (!apiKey) {
-    throw createError({ statusCode: 500, statusMessage: 'DEEPL_API_KEY or GOOGLE_TRANSLATE_API_KEY not configured' })
+    throw createError({ statusCode: 500, statusMessage: 'GROQ_API_KEY or translation API key not configured' })
   }
 
-  // Prefer DeepL if key is present, otherwise fall back to Google
-  const useDeepL = !!runtimeConfig.deepLApiKey
+  // Priority: Groq (best context) > DeepL (good quality) > Google (fallback)
+  const useGroq = !!runtimeConfig.groqApiKey
+  const useDeepL = !useGroq && !!runtimeConfig.deepLApiKey
 
   try {
-    const translations = useDeepL
-      ? await translateWithDeepL(texts, apiKey, 'sl', 'en-us')
-      : await import('../utils/google-translate').then((m) => m.translateWithGoogle(texts, apiKey, 'sl', 'en'))
+    let translations: string[]
+
+    if (useGroq) {
+      translations = await translateWithGroq(texts, apiKey)
+    } else if (useDeepL) {
+      translations = await translateWithDeepL(texts, apiKey, 'sl', 'en-us')
+    } else {
+      translations = await import('../utils/google-translate').then((m) => m.translateWithGoogle(texts, apiKey, 'sl', 'en'))
+    }
 
     return { translations }
   } catch (err: any) {
