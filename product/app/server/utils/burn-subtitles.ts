@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { writeFile, readFile, unlink } from 'node:fs/promises'
+import { writeFile, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { segmentsToSrt } from './srt'
 
@@ -7,14 +7,6 @@ interface Segment {
   start: number
   end: number
   text: string
-}
-
-function findFfmpeg(): string {
-  try {
-    const installer = require('@ffmpeg-installer/ffmpeg')
-    if (installer?.path) return installer.path
-  } catch { /* ignore */ }
-  return 'ffmpeg'
 }
 
 export async function burnSubtitlesToVideo(
@@ -26,8 +18,9 @@ export async function burnSubtitlesToVideo(
   const srtPath = outputPath.replace(/\.[^.]+$/, '.srt')
 
   await writeFile(srtPath, srtContent, 'utf-8')
+  console.log('[burn] SRT written to', srtPath, `(${segments.length} segments)`)
 
-  const ffmpegPath = findFfmpeg()
+  const ffmpegPath = 'ffmpeg'
   const args = [
     '-y',
     '-i', videoPath,
@@ -37,14 +30,31 @@ export async function burnSubtitlesToVideo(
     outputPath,
   ]
 
+  console.log('[burn] Spawning ffmpeg:', ffmpegPath, args.join(' '))
+
   return new Promise((resolve, reject) => {
-    const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const proc = spawn(ffmpegPath, args, {
+      stdio: ['ignore', 'ignore', 'pipe']
+    })
 
     let stderr = ''
-    proc.stderr?.on('data', (d) => { stderr += d.toString() })
+    proc.stderr?.on('data', (d) => {
+      const chunk = d.toString()
+      stderr += chunk
+      // Log progress lines (they contain "frame=")
+      if (chunk.includes('frame=') || chunk.includes('size=')) {
+        console.log('[burn] ffmpeg:', chunk.trim().slice(0, 120))
+      }
+    })
 
-    proc.on('error', reject)
+    proc.on('error', (err) => {
+      console.error('[burn] ffmpeg spawn error:', err)
+      reject(err)
+    })
+
     proc.on('close', async (code) => {
+      console.log('[burn] ffmpeg exited with code', code)
+
       // Clean up temp SRT
       try { await unlink(srtPath) } catch { /* ignore */ }
 
