@@ -50,7 +50,8 @@
       <div class="mb-6">
         <label class="block text-sm font-medium text-gray-700 mb-2">Preview</label>
         <div class="bg-gray-50 rounded-xl p-4 max-h-64 overflow-y-auto font-mono text-xs text-gray-600">
-          <pre class="whitespace-pre-wrap">{{ preview }}</pre>
+          <pre v-if="!srtLoading" class="whitespace-pre-wrap">{{ previewSrt }}</pre>
+          <div v-else class="text-gray-400">Loading preview...</div>
         </div>
       </div>
 
@@ -197,6 +198,29 @@ const segments = computed(() =>
   language.value === 'en' && props.translation ? props.translation : props.transcript
 )
 
+const previewSrt = ref('')
+const srtLoading = ref(false)
+
+async function generateSrt() {
+  srtLoading.value = true
+  try {
+    const response = await $fetch<{ srt: string }>('api/srt', {
+      method: 'POST',
+      body: { segments: segments.value },
+    })
+    previewSrt.value = response.srt
+  } catch {
+    // Fallback to client-side simple preview if server fails
+    previewSrt.value = segments.value
+      .map((seg, i) => `${i + 1}\n${toSrtTime(seg.start)} --> ${toSrtTime(seg.end)}\n${seg.text}`)
+      .join('\n\n')
+  } finally {
+    srtLoading.value = false
+  }
+}
+
+watch(segments, generateSrt, { immediate: true })
+
 function toSrtTime(seconds: number): string {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
@@ -204,12 +228,6 @@ function toSrtTime(seconds: number): string {
   const ms = Math.round((seconds % 1) * 1000)
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`
 }
-
-const preview = computed(() => {
-  return segments.value
-    .map((seg, i) => `${i + 1}\n${toSrtTime(seg.start)} --> ${toSrtTime(seg.end)}\n${seg.text}`)
-    .join('\n\n')
-})
 
 async function burnVideo() {
   if (!props.uploadId || burning.value) return
@@ -308,7 +326,7 @@ function pollBurnJob(jobId: string): Promise<void> {
 }
 
 function downloadSrt() {
-  const blob = new Blob([preview.value], { type: 'text/plain;charset=utf-8' })
+  const blob = new Blob([previewSrt.value], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
