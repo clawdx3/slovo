@@ -32,15 +32,28 @@
       </div>
     </label>
 
-    <!-- Progress -->
-    <div v-if="uploading" class="w-full max-w-xl mt-8">
+    <!-- Upload progress -->
+    <div v-if="phase === 'uploading'" class="w-full max-w-xl mt-8">
       <div class="flex items-center justify-between text-sm mb-2">
-        <span class="text-gray-600">Uploading... {{ Math.round(progress) }}%</span>
+        <span class="text-gray-600">Uploading... {{ Math.round(uploadProgress) }}%</span>
       </div>
       <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
         <div
           class="h-full bg-teal-500 rounded-full transition-all duration-300"
-          :style="{ width: progress + '%' }"
+          :style="{ width: uploadProgress + '%' }"
+        />
+      </div>
+    </div>
+
+    <!-- Processing progress -->
+    <div v-else-if="phase === 'processing'" class="w-full max-w-xl mt-8">
+      <div class="flex items-center justify-between text-sm mb-2">
+        <span class="text-gray-600">{{ processingLabel }} {{ Math.round(processProgress) }}%</span>
+      </div>
+      <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          class="h-full bg-teal-500 rounded-full transition-all duration-300"
+          :style="{ width: processProgress + '%' }"
         />
       </div>
     </div>
@@ -50,7 +63,7 @@
       {{ error }}
     </div>
 
-    <!-- Info note for iPhone users -->
+    <!-- Info note -->
     <div class="mt-8 text-center max-w-md">
       <p class="text-xs text-gray-300 leading-relaxed">
         Works great with iPhone 15 Pro videos. For 4K ProRes files, consider compressing first for faster upload.
@@ -65,9 +78,15 @@ import type { TranscriptSegment } from '~/types'
 const emit = defineEmits<{ (e: 'uploaded', data: { id: string; segments: TranscriptSegment[] }): void }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
-const uploading = ref(false)
-const progress = ref(0)
+const phase = ref<'idle' | 'uploading' | 'processing'>('idle')
+const uploadProgress = ref(0)
+const processProgress = ref(0)
 const error = ref('')
+
+const processingLabel = computed(() => {
+  if (processProgress.value < 50) return 'Extracting audio...'
+  return 'Transcribing...'
+})
 
 function handleDrop(e: DragEvent) {
   const files = e.dataTransfer?.files
@@ -81,50 +100,109 @@ function handleFileSelect(e: Event) {
 
 async function processFile(file: File) {
   error.value = ''
-  uploading.value = true
-  progress.value = 0
+  phase.value = 'uploading'
+  uploadProgress.value = 0
+  processProgress.value = 0
 
   if (file.size > 500 * 1024 * 1024) {
     error.value = 'File too large. Maximum 500 MB.'
-    uploading.value = false
+    phase.value = 'idle'
     return
   }
 
   const formData = new FormData()
   formData.append('video', file)
 
-  try {
-    const xhr = new XMLHttpRequest()
-    xhr.upload.addEventListener('progress', (evt) => {
-      if (evt.lengthComputable) {
-        progress.value = (evt.loaded / evt.total) * 100
-      }
-    })
+  let uploadId: string
 
-    const response = await new Promise<{ id: string; segments: TranscriptSegment[] }>((resolve, reject) => {
+  // Phase 1: Upload
+  try {
+    const uploadRes = await new Promise<{ uploadId: string }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.upload.addEventListener('progress', (evt) => {
+        if (evt.lengthComputable) {
+          uploadProgress.value = (evt.loaded / evt.total) * 100
+        }
+      })
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             resolve(JSON.parse(xhr.responseText))
           } catch {
-            reject(new Error('Invalid response'))
+            reject(new Error('Invalid upload response'))
           }
         } else {
           reject(new Error(`Upload failed: ${xhr.statusText || xhr.status}`))
         }
       })
       xhr.addEventListener('error', () => reject(new Error('Network error')))
-      xhr.open('POST', 'api/transcribe')
+      xhr.open('POST', 'api/upload')
       xhr.send(formData)
     })
-
-    emit('uploaded', response)
+    uploadId = uploadRes.uploadId
   } catch (err: any) {
     error.value = err?.message || 'Upload failed. Please try again.'
+    phase.value = 'idle'
+    return
+  }
+
+  // Phase 2: Start transcription job
+  phase.value = 'processing'
+  processProgress.value = 0
+
+  try {
+    await $fetch('api/transcribe', {
+      method: 'POST',
+      body: { uploadId },
+    })
+  } catch (err: any) {
+    error.value = err?.statusMessage || 'Failed to start transcription. Please try again.'
+    phase.value = 'idle'
+    return
+  }
+
+  // Phase 3: Poll job status
+  try {
+    const segments = await pollJob(uploadId)
+    emit('uploaded', { id: uploadId, segments })
+  } catch (err: any) {
+    error.value = err?.message || 'Transcription failed. Please try again.'
   } finally {
-    uploading.value = false
-    progress.value = 0
+    phase.value = 'idle'
+    processProgress.value = 0
     if (inputRef.value) inputRef.value.value = ''
   }
+}
+
+async function pollJob(jobId: string): Promise<TranscriptSegment[]> {
+  return new Promise((resolve, reject) => {
+    const interval = setInterval(async () => {
+      try {
+        const job = await $fetch<{
+          status: string
+          progress: number
+          segments?: TranscriptSegment[]
+          error?: string
+        }>(`api/jobs/${jobId}`)
+
+        processProgress.value = job.progress
+
+        if (job.status === 'completed') {
+          clearInterval(interval)
+          if (job.segments) {
+            resolve(job.segments)
+          } else {
+            reject(new Error('No segments returned'))
+          }
+        } else if (job.status === 'failed') {
+          clearInterval(interval)
+          reject(new Error(job.error || 'Transcription failed'))
+        }
+      } catch (err: any) {
+        clearInterval(interval)
+        reject(new Error(err?.statusMessage || 'Failed to check job status'))
+      }
+    }, 500)
+  })
 }
 </script>

@@ -6,9 +6,18 @@ export interface TranscriptSegment {
 
 export interface TranscriptionJob {
   id: string
-  status: 'pending' | 'processing' | 'completed' | 'failed'
+  status: 'pending' | 'extracting_audio' | 'transcribing' | 'completed' | 'failed'
+  progress: number
   segments: TranscriptSegment[] | null
   error: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface JobStatus {
+  id: string
+  status: 'pending' | 'extracting_audio' | 'transcribing' | 'completed' | 'failed'
+  progress: number
+  segments?: TranscriptSegment[]
+  error?: string
 }

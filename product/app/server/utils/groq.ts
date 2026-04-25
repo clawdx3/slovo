@@ -1,7 +1,10 @@
-export async function transcribeWithGroq(audioBuffer: Buffer, apiKey: string): Promise<{ segments: Array<{ start: number; end: number; text: string }> }> {
+import { createReadStream } from 'node:fs'
+
+export async function transcribeWithGroq(audioPath: string, apiKey: string): Promise<{ segments: Array<{ start: number; end: number; text: string }> }> {
   const formData = new FormData()
-  const blob = new Blob([audioBuffer], { type: 'audio/mp4' })
-  formData.append('file', blob, 'audio.mp4')
+  const fileStream = createReadStream(audioPath)
+  const blob = new Blob([await streamToBuffer(fileStream)], { type: 'audio/mp4' })
+  formData.append('file', blob, 'audio.m4a')
   formData.append('model', 'whisper-large-v3')
   formData.append('response_format', 'verbose_json')
   formData.append('language', 'sl')
@@ -31,4 +34,13 @@ export async function transcribeWithGroq(audioBuffer: Buffer, apiKey: string): P
   }
 
   return { segments: data.segments }
+}
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+    stream.on('error', reject)
+    stream.on('end', () => resolve(Buffer.concat(chunks)))
+  })
 }
