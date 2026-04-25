@@ -3,7 +3,7 @@ export function segmentsToSrt(segments: Array<{ start: number; end: number; text
     .map((seg, i) => {
       const start = formatSrtTime(seg.start)
       const end = formatSrtTime(seg.end)
-      const wrapped = wrapText(seg.text, 40)
+      const wrapped = wrapText(seg.text, 30)
       return `${i + 1}\n${start} --> ${end}\n${wrapped}`
     })
     .join('\n\n')
