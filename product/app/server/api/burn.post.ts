@@ -1,11 +1,11 @@
-import { createReadStream } from 'node:fs'
+import { createReadStream, stat as fsStat } from 'node:fs'
 import { access, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { burnSubtitlesToVideo } from '../utils/burn-subtitles'
 
 export default defineEventHandler(async (event) => {
   console.log('[burn] ========== REQUEST START ==========')
-  
+
   const body = await readBody(event)
   console.log('[burn] Body parsed:', { uploadId: body?.uploadId, segmentsCount: body?.segments?.length })
 
@@ -38,8 +38,7 @@ export default defineEventHandler(async (event) => {
     console.log('[burn] ffmpeg completed successfully')
 
     const stats = await new Promise<import('node:fs').Stats>((resolve, reject) => {
-      const fs = require('node:fs')
-      fs.stat(outputPath, (err: any, st: import('node:fs').Stats) => {
+      fsStat(outputPath, (err: any, st: import('node:fs').Stats) => {
         if (err) reject(err)
         else resolve(st)
       })
@@ -51,7 +50,7 @@ export default defineEventHandler(async (event) => {
     setHeader(event, 'Content-Length', String(stats.size))
 
     const stream = createReadStream(outputPath)
-    
+
     event.node.res.on('finish', () => {
       console.log('[burn] Response finished, cleaning up temp file')
       unlink(outputPath).catch(() => {})
