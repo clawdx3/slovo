@@ -1,4 +1,4 @@
-import { writeFile, mkdir } from 'node:fs/promises'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 export default defineEventHandler(async (event) => {
@@ -11,10 +11,11 @@ export default defineEventHandler(async (event) => {
 
   const id = crypto.randomUUID()
   const uploadsDir = join(process.cwd(), '.data', 'uploads')
-  await mkdir(uploadsDir, { recursive: true })
+  mkdirSync(uploadsDir, { recursive: true })
   const filePath = join(uploadsDir, `${id}.mp4`)
 
-  await writeFile(filePath, new Uint8Array(await videoFile.arrayBuffer()))
+  const buf = Buffer.from(await videoFile.arrayBuffer())
+  writeFileSync(filePath, buf)
 
   return { uploadId: id }
 })

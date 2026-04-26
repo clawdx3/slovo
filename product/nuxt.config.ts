@@ -13,6 +13,7 @@ export default defineNuxtConfig({
     },
   },
   nitro: {
+    maxRequestBodySize: 600 * 1024 * 1024, // 600 MB to allow 500 MB uploads with overhead
     experimental: {
       wasm: true,
     },
